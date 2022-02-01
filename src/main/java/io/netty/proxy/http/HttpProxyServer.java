@@ -44,25 +44,29 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
 
     @Override
     public void onApplicationEvent(ContextRefreshedEvent contextRefreshedEvent) {
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
-        try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        public void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new HttpProxyClientHandler());
-                        }
-                    })
-                    .bind(properties.getHttpPort()).sync().channel().closeFuture().sync();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } finally {
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
-        }
+        new Thread(() -> {
+            EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            try {
+                ServerBootstrap serverBootstrap = new ServerBootstrap();
+                ChannelFuture future = serverBootstrap.group(bossGroup, workerGroup)
+                        .channel(NioServerSocketChannel.class)
+                        .childHandler(new ChannelInitializer<SocketChannel>() {
+                            @Override
+                            public void initChannel(SocketChannel ch) throws Exception {
+                                ch.pipeline().addLast(new HttpProxyClientHandler());
+                            }
+                        })
+                        .bind(properties.getHttpPort()).sync();
+                log.info("http proxy server has started on port {}", properties.getHttpPort());
+                future.channel().closeFuture().sync();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                bossGroup.shutdownGracefully();
+                workerGroup.shutdownGracefully();
+            }
+        }).start();
     }
 
 
@@ -100,38 +104,37 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
             try {
                 // 1.读包与完整性校验
                 if (!request.isCompleted()) {
-                    request.read(input);
-                    if (request.isCompleted()) {
-                        // 解包完毕
+                    if (request.read(input)) {
                         clientChannel.config().setAutoRead(false);
+                    }
+                    // 2.登录授权校验
+                    // https://developer.mozilla.org/zh-CN/docs/Web/HTTP/requests/Proxy-Authorization
+                    if (properties.isEnableAuth()) {
+                        BasicAuthorization auth = BasicAuthorization.decode(request.getHeaders().get("Proxy-Authorization"));
+                        if (auth == null) {
+                            log.error("{} deny by empty authorization", request.desc());
+                            clientChannel.close();
+                            return;
+                        } else if (!Objects.equals(properties.getAuth().get(auth.getUsername()), auth.getPassword())) {
+                            log.error("{} deny by bad authorization user={} password={}",
+                                    request.desc(),
+                                    auth.getUsername(),
+                                    auth.getPassword());
+                            clientChannel.close();
+                            return;
+                        } else {
+                            log.info("{} by user={}", request.desc(), auth.getUsername());
+                        }
                     } else {
-                        // 遇到了拆包，等待下一次读包结束
-                        return;
+                        log.info("{}", request.desc());
                     }
 
-                } else if (remoteChannel.isActive()) {
+                } else {
                     // 如果本次请求中已经解析过request了, 说明代理客户端已经在目标主机建立了连接，直接将真实客户端的数据写给目标主机
                     remoteChannel.writeAndFlush(msg);
                     return;
                 }
 
-                // 2.登录授权校验
-                // https://developer.mozilla.org/zh-CN/docs/Web/HTTP/requests/Proxy-Authorization
-                BasicAuthorization auth = BasicAuthorization.decode(request.getAuthorization());
-                if (auth == null) {
-                    log.error("{} deny by empty authorization", request.desc());
-                    clientChannel.close();
-                    return;
-                } else if (!Objects.equals(properties.getAuth().get(auth.getUsername()), auth.getPassword())) {
-                    log.error("{} deny by bad authorization user={} password={}",
-                            request.desc(),
-                            auth.getUsername(),
-                            auth.getPassword());
-                    clientChannel.close();
-                    return;
-                } else {
-                    log.info("{} by user={}", request.desc(), auth.getUsername());
-                }
             } catch (Throwable err) {
                 log.error("Unexpected error " + err.toString());
                 clientChannel.close();

@@ -4,6 +4,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Data;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 真实主机的请求头信息
  */
@@ -33,7 +36,7 @@ final class HttpRequestContext {
     /**
      * 访问授权信息
      */
-    private String authorization;
+    private Map<String, String> headers = new HashMap<>();
 
     /**
      * 是否解析完成
@@ -57,15 +60,15 @@ final class HttpRequestContext {
         return "[" + method + "] " + host + ":" + port;
     }
 
-    void read(ByteBuf in) {
+    boolean read(ByteBuf in) {
         while (in.isReadable()) {
             if (completed) {
-                throw new IllegalStateException("already completed");
+                return true;
             }
 
             String line = readLine(in);
             if (line == null) {
-                return;
+                return false;
             }
 
             if (method == null) {
@@ -86,9 +89,9 @@ final class HttpRequestContext {
                 }
             }
 
-            if (line.startsWith("Proxy-Authorization")) {
+            if (line.contains(":")) {
                 String[] arr = line.split(":");
-                authorization = arr[1].trim();
+                headers.put(arr[0], arr[1].trim());
             }
 
             if (line.isEmpty()) {
@@ -100,6 +103,7 @@ final class HttpRequestContext {
                 break;
             }
         }
+        return completed;
     }
 
     private String readLine(ByteBuf in) {

@@ -1,6 +1,7 @@
 package io.netty.proxy.http;
 
 import lombok.Data;
+import org.springframework.util.StringUtils;
 
 import java.util.Base64;
 
@@ -14,6 +15,10 @@ class BasicAuthorization {
     private String password;
 
     static BasicAuthorization decode(String authorization) {
+        if (StringUtils.isEmpty(authorization)) {
+            return null;
+        }
+
         byte[] result = Base64.getDecoder().decode(authorization.startsWith(BASIC_PREFIX)
                 ? authorization.substring(BASIC_PREFIX.length())
                 : authorization);
