@@ -23,7 +23,7 @@ public class AppProperties {
     /**
      * 是否认证的开关
      */
-    private boolean enableAuth = true;
+    private boolean enableAuth = false;
 
     /**
      * 服务绑定的端口号

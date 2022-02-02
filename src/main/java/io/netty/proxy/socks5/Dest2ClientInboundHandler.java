@@ -30,6 +30,6 @@ public class Dest2ClientInboundHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Dest2ClientInboundHandler exception", cause);
+        log.error("Dest2ClientInboundHandler exception " + cause);
     }
 }

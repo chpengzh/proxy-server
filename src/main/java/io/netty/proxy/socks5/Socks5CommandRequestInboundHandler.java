@@ -54,7 +54,6 @@ public class Socks5CommandRequestInboundHandler extends SimpleChannelInboundHand
         bootstrap.group(eventExecutors)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.TCP_NODELAY, true)
-                .option(ChannelOption.SO_TIMEOUT, 10_000)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {

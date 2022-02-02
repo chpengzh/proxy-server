@@ -131,7 +131,7 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
 
                 } else {
                     // 如果本次请求中已经解析过request了, 说明代理客户端已经在目标主机建立了连接，直接将真实客户端的数据写给目标主机
-                    remoteChannel.writeAndFlush(msg);
+                    sendToRemote(input);
                     return;
                 }
 
@@ -148,6 +148,7 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
             remoteChannel = connectToServer(
                     // 后端要经过一次socks5代理
                     new Socks5ProxyHandler(new InetSocketAddress(properties.getProxyHost(), properties.getProxyPort())),
+                    //new LoggingHandler(LogLevel.INFO),
                     new ChannelInboundHandlerAdapter() {
 
                         private Channel remoteChannel;
@@ -187,6 +188,10 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
             flushAndClose(clientChannel);
         }
 
+        private void sendToRemote(ByteBuf msg) {
+            remoteChannel.writeAndFlush(msg);
+        }
+
         /**
          * 与后端进行建连操作
          */
@@ -209,8 +214,8 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
                     clientChannel.config().setAutoRead(true);
                     // forward request and remaining bytes
                     if (!request.isConnect()) {
-                        //in读取一次缓冲区就没有了，request.byteBuf里面存了一份
-                        remoteChannel.writeAndFlush(request.getByteBuf());
+                        //request读取一次缓冲区就没有了，request.byteBuf里面存了一份
+                        sendToRemote(request.getByteBuf());
                     }
                 } else {
                     clientChannel.close();
@@ -232,6 +237,5 @@ public class HttpProxyServer implements ApplicationListener<ContextRefreshedEven
             }
         }
     }
-
 }
 
